@@ -36,7 +36,9 @@
     dest: "/etc/yum.repos.d/{{ grafana_yum_repo_template | basename | regex_replace('\\.j2$', '') }}"
     force: true
     backup: true
-  when: ansible_pkg_mgr in ['yum', 'dnf']
+  when: 
+     - ansible_pkg_mgr in ['yum', 'dnf']
+     - grafana_rpm_local_dir | length == 0
 
 - block:
     - name: Import Grafana GPG signing key [Debian/Ubuntu]
@@ -71,3 +73,24 @@
   retries: 5
   delay: 2
   notify: restart grafana
+  when: 
+    - grafana_rpm_local_dir | length == 0
+
+- name: propagate locally distributed grafana rpm
+  copy:
+      src: "{{ item }}"
+      dest: "{{ grafana_rpm_install_dir }}/grafana/"
+      mode: 0755
+      owner: root
+      group: root
+  with_fileglob: "{{ grafana_rpm_local_dir }}/*.rpm"
+  register: grafanarpm
+  when: grafana_rpm_local_dir | length > 0
+  
+- debug: var=grafanarpm.results[0].path
+
+- name: install grafana rpm from a local file
+  yum:
+      name: "{{ grafanarpm.results[0].path }}"
+      state: present
+  when: grafana_rpm_local_dir | length > 0
